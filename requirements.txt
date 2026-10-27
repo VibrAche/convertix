@@ -1,0 +1,21 @@
+# Interface
+PySide6-Essentials>=6.7
+
+# Images
+Pillow>=11.2          # AVIF intégré à partir de 11.2
+pillow-heif>=0.18     # HEIC / HEIF (photos iPhone)
+rawpy>=0.21           # RAW / DNG (LibRaw)
+numpy>=1.26
+
+# Documents
+PyMuPDF>=1.24,<2    # PDF → images / texte, fusion PDF (la 2.x embarque onnxruntime : trop lourd)
+pdf2docx>=0.5.8       # PDF → Word
+python-docx>=1.1      # Word → texte
+openpyxl>=3.1         # CSV ↔ Excel
+
+# Audio / vidéo (fournit un binaire ffmpeg pour chaque OS)
+imageio-ffmpeg>=0.5
+
+# Intégration système
+pywin32>=306; sys_platform == "win32"     # Explorateur, presse-papiers, Office (COM)
+pynput>=1.7; sys_platform == "darwin"     # raccourci global sur Mac

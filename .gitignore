@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+out/
+*.spec.bak
+.pytest_cache/
+.DS_Store
+Thumbs.db
+# fichiers produits pendant les tests manuels
+tests/samples_raw/Convertis/
+# Les vrais DNG / photos perso ne doivent pas partir sur GitHub
+tests/samples_raw/*
+!tests/samples_raw/synthetique.dng
+!tests/samples_raw/README.md

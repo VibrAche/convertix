@@ -1,0 +1,136 @@
+name: Build
+
+# Construit l'installeur Windows et l'app Mac à chaque push sur main,
+# et publie une Release GitHub quand on pousse un tag "v0.1.0", "v0.2.0"…
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Version
+        id: v
+        shell: bash
+        run: echo "version=$(python -c 'import convertix; print(convertix.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: PyInstaller
+        run: pyinstaller packaging/convertix.spec --noconfirm
+
+      - name: Test de fumée de l'exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          $p = Start-Process -FilePath "dist\Convertix\Convertix.exe" -ArgumentList "--to","jpg","--out","out","tests\samples_raw\synthetique.dng" -Wait -PassThru
+          if (-not (Test-Path "out\synthetique.jpg")) { Get-Content "$env:APPDATA\Convertix\convertix.log" -ErrorAction SilentlyContinue; throw "La conversion DNG -> JPG de l'exe a échoué" }
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+            $env:PATH += ";C:\Program Files (x86)\Inno Setup 6"
+          }
+          iscc /DMyAppVersion=${{ steps.v.outputs.version }} packaging\windows\installer.iss
+
+      - name: Version portable (zip)
+        shell: pwsh
+        run: Compress-Archive -Path dist\Convertix\* -DestinationPath dist\Convertix-Portable-Windows-${{ steps.v.outputs.version }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Convertix-Windows
+          path: |
+            dist/Convertix-Setup-*.exe
+            dist/Convertix-Portable-Windows-*.zip
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest       # Mac Apple Silicon (M1, M2, M3, M4…)
+            arch: apple-silicon
+          - runner: macos-15-intel     # Mac Intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Version
+        id: v
+        run: echo "version=$(python -c 'import convertix; print(convertix.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: PyInstaller
+        run: pyinstaller packaging/convertix.spec --noconfirm
+
+      - name: Test de fumée
+        run: |
+          mkdir -p out
+          dist/Convertix.app/Contents/MacOS/Convertix --to jpg --out out tests/samples_raw/synthetique.dng
+          test -f out/synthetique.jpg
+
+      - name: Signature ad hoc (évite « l'app est endommagée » sans compte développeur Apple)
+        run: codesign --force --deep --sign - dist/Convertix.app
+
+      - name: DMG
+        run: |
+          mkdir -p dmg && cp -R dist/Convertix.app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname Convertix -srcfolder dmg -ov -format UDZO "dist/Convertix-${{ steps.v.outputs.version }}-mac-${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Convertix-macOS-${{ matrix.arch }}
+          path: dist/Convertix-*-mac-*.dmg
+
+  release:
+    # publie ce qui a été construit, même si une seule des versions Mac a échoué
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.windows.result == 'success'
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
