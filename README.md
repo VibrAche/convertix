@@ -116,7 +116,9 @@ Couleur d'accent, thème clair / sombre, raccourci clavier, qualité des images,
 <details>
 <summary><b>Le clic droit n'affiche pas Convertix sous Windows 11</b></summary>
 
-Windows 11 range les apps dans **Afficher plus d'options** (ou <kbd>Maj</kbd> + clic droit). Tu peux aussi utiliser **Envoyer vers → Convertix**, ou simplement <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>C</kbd>.
+Windows 11 range les apps dans **Afficher d'autres options** (ou <kbd>Maj</kbd> + clic droit). Pour l'avoir dès le premier clic droit : **Réglages → Système → « Convertix dès le premier clic droit »**, puis **Appliquer maintenant**. Ça remet le menu complet de Windows (comme sur Windows 10) pour toutes les apps ; désactive-le pour revenir en arrière.
+
+Sinon, le plus rapide reste <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>C</kbd>.
 </details>
 
 <details>

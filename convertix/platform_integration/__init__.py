@@ -82,6 +82,34 @@ def is_autostart() -> bool:
     return False
 
 
+def has_short_menu() -> bool:
+    """Windows 11 : le clic droit montre d'abord un menu court, sans les apps classiques comme Convertix."""
+    if IS_WIN:
+        from . import windows
+        return windows.is_windows11()
+    return False
+
+
+def full_menu_enabled() -> bool:
+    if IS_WIN:
+        from . import windows
+        return windows.classic_menu_enabled()
+    return False
+
+
+def set_full_menu(enabled: bool) -> None:
+    """Windows 11 : remet le menu clic droit complet (Convertix visible dès le premier clic droit)."""
+    if IS_WIN:
+        from . import windows
+        windows.set_classic_menu(enabled)
+
+
+def restart_file_manager() -> None:
+    if IS_WIN:
+        from . import windows
+        windows.restart_explorer()
+
+
 def notify(title: str, body: str, button: str, on_click) -> bool:
     """Notification native avec un bouton (Windows). False → l'appelant utilise la bulle de l'icône."""
     if IS_WIN:

@@ -185,6 +185,63 @@ def is_autostart() -> bool:
         return False
 
 
+# =========================================================================== menu clic droit complet (Windows 11)
+
+# Clé connue qui désactive le nouveau menu court de Windows 11 : le menu complet (avec Convertix) revient
+# dès le premier clic droit. Elle concerne tout Windows, d'où un interrupteur désactivé par défaut.
+CLASSIC_MENU_KEY = r"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+OWN_KEY = r"Software\Convertix"  # on retient que c'est Convertix qui l'a activé (pour le retirer proprement)
+
+
+def is_windows11() -> bool:
+    return sys.getwindowsversion().build >= 22000
+
+
+def classic_menu_enabled() -> bool:
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLASSIC_MENU_KEY):
+            return True
+    except OSError:
+        return False
+
+
+def set_classic_menu(enabled: bool) -> None:
+    import winreg
+    if enabled:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, CLASSIC_MENU_KEY) as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, OWN_KEY) as k:
+            winreg.SetValueEx(k, "ClassicMenu", 0, winreg.REG_DWORD, 1)
+    else:
+        for key in (CLASSIC_MENU_KEY, CLASSIC_MENU_KEY.rsplit("\\", 1)[0]):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except OSError:
+                pass
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, OWN_KEY, 0, winreg.KEY_SET_VALUE) as k:
+                winreg.DeleteValue(k, "ClassicMenu")
+        except OSError:
+            pass
+
+
+def classic_menu_set_by_us() -> bool:
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, OWN_KEY) as k:
+            return winreg.QueryValueEx(k, "ClassicMenu")[0] == 1
+    except OSError:
+        return False
+
+
+def restart_explorer() -> None:
+    """Relance l'Explorateur pour appliquer le changement de menu (les fenêtres de dossiers se ferment)."""
+    import subprocess
+    subprocess.run(["taskkill", "/f", "/im", "explorer.exe"], capture_output=True, creationflags=0x08000000)
+    subprocess.Popen(["explorer.exe"], creationflags=0x08000000)
+
+
 # =========================================================================== notifications natives
 
 AUMID = "VibrAche.Convertix"
@@ -238,6 +295,8 @@ def uninstall_all() -> None:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{AUMID}")
     except OSError:
         pass
+    if classic_menu_set_by_us():  # on ne retire le menu complet que si c'est Convertix qui l'avait mis
+        set_classic_menu(False)
     unregister_context_menu()
     unregister_sendto()
     set_autostart(False)

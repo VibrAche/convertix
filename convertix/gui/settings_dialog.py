@@ -109,6 +109,20 @@ class SettingsWindow(GlassWindow):
         self.integ_btn = QPushButton(clicked=self._toggle_integration)
         g.addWidget(self.integ_lbl, 2, 0)
         g.addWidget(self.integ_btn, 2, 1, Qt.AlignRight)
+        if pi.has_short_menu():  # Windows 11 : Convertix est caché sous « Afficher d'autres options »
+            self.full_menu = Switch("Convertix dès le premier clic droit", pi.full_menu_enabled())
+            self.full_menu.setToolTip("Remet le menu clic droit complet de Windows (celui de Windows 10), "
+                                      "pour toutes les apps. Désactive-le pour revenir au menu court.")
+            self.full_menu.toggled.connect(self._set_full_menu)
+            g.addWidget(self.full_menu, 3, 0, 1, 2)
+            self.menu_hint = QLabel("Les fenêtres de dossiers ouvertes vont se fermer un instant.",
+                                    objectName="Muted", wordWrap=True)
+            self.menu_apply = QPushButton("Appliquer maintenant", objectName="Link",
+                                          clicked=self._apply_full_menu)
+            g.addWidget(self.menu_hint, 4, 0)
+            g.addWidget(self.menu_apply, 4, 1, Qt.AlignRight)
+            self.menu_hint.hide()
+            self.menu_apply.hide()
         g.setColumnStretch(0, 1)
         self._refresh_integration()
 
@@ -161,6 +175,18 @@ class SettingsWindow(GlassWindow):
         self.settings.hotkey_enabled = self.hotkey_on.isChecked()
         self.settings.save()
         self.changed.emit()
+
+    def _set_full_menu(self, on: bool) -> None:
+        pi.set_full_menu(on)
+        self.menu_hint.show()
+        self.menu_apply.show()
+        self.adjustSize()
+
+    def _apply_full_menu(self) -> None:
+        pi.restart_file_manager()
+        self.menu_hint.hide()
+        self.menu_apply.hide()
+        self.adjustSize()
 
     def _refresh_integration(self) -> None:
         on = pi.is_integrated()
