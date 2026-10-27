@@ -116,6 +116,15 @@ def test_video_hdr_tonemap(tmp_path):
     assert out.vcodec == "h264" and not out.hdr
 
 
+def test_thumbnails(samples):
+    """Aperçu au centre de l'éventail : photo, SVG, PDF, livre, vidéo → miniature carrée ; Word → None (icône)."""
+    from convertix.thumbs import thumbnail
+    for name in ("photo.heic", "orientation.jpg", "logo.svg", "document.pdf", "livre.epub", "video.mov"):
+        img = thumbnail(next(p for p in samples if p.name == name), 96)
+        assert img is not None and img.size == (96, 96), name
+    assert thumbnail(next(p for p in samples if p.suffix == ".docx")) is None
+
+
 def test_update_version_compare():
     from convertix.updates import is_newer
     assert is_newer("0.10.0", "0.9.3") and is_newer("v1.0.0", "0.2.0")

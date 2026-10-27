@@ -37,7 +37,7 @@ HINTS = {"jpg": "Photo légère", "png": "Sans perte", "webp": "Pour le web", "a
 MERGE, MORE = "__merge__", "__more__"
 
 W, H = 600, 440           # fenêtre transparente qui contient l'éventail
-BUBBLE_R, HUB_R = 33, 36  # rayons des bulles et du moyeu central
+BUBBLE_R, HUB_R = 33, 40  # rayons des bulles et du moyeu central (qui montre l'aperçu du fichier)
 R1, R2 = 150, 240         # rayons des deux arcs
 GAP = 12                  # espace entre deux bulles d'un même arc
 INNER_MAX = 7             # au-delà : 6 bulles + une bulle « +N » qui ouvre le 2e arc (demi-cercle max)
@@ -65,6 +65,7 @@ def _kind(files: list[Path]) -> str:
 
 class FanMenu(QWidget):
     finished_ok = Signal(list)  # fichiers produits (pour la notification)
+    thumb_ready = Signal(str, QImage)  # chemin, miniature calculée dans un autre thread
 
     def __init__(self, files: list[Path], settings: Settings, message: str = ""):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -91,6 +92,10 @@ class FanMenu(QWidget):
         self._close_when_done = False
         self.bg: QPixmap | None = None   # capture floutée de l'écran derrière la fenêtre
         self.bg_small: QImage | None = None
+        self.preview_for: Path | None = None  # fichier dont le moyeu montre l'aperçu
+        self.thumb: QImage | None = None      # miniature (photo, 1re image de vidéo, 1re page de PDF)
+        self.file_icon: QPixmap | None = None # sinon : icône du fichier fournie par le système
+        self.thumb_ready.connect(self._on_thumb)
 
         self.t_open = self._anim(320)    # ouverture de l'éventail (0 → 1)
         self.t_outer = self._anim(280)   # ouverture du 2e arc
@@ -111,9 +116,35 @@ class FanMenu(QWidget):
         self.files = engine.collect_files(self.files + list(files))
         if self.files:
             self.message = ""
+            self._load_preview(self.files[0])
         self._build_bubbles()
         self._layout()
         self.update()
+
+    def _load_preview(self, path: Path) -> None:
+        """Icône du système tout de suite, puis la vraie miniature dès qu'elle est prête (thread)."""
+        if path == self.preview_for:
+            return
+        self.preview_for, self.thumb = path, None
+        from PySide6.QtCore import QFileInfo
+        from PySide6.QtWidgets import QFileIconProvider
+        icon = QFileIconProvider().icon(QFileInfo(str(path)))
+        self.file_icon = icon.pixmap(64, 64) if not icon.isNull() else None
+
+        def work(p: Path = path) -> None:
+            from ..thumbs import thumbnail
+            img = thumbnail(p, 2 * HUB_R * 2)  # ×2 pour les écrans haute définition
+            if img is not None:
+                data = img.tobytes("raw", "RGBA")
+                qimg = QImage(data, img.width, img.height, 4 * img.width, QImage.Format_RGBA8888).copy()
+                self.thumb_ready.emit(str(p), qimg)
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_thumb(self, path: str, img: QImage) -> None:
+        if self.preview_for is not None and Path(path) == self.preview_for:
+            self.thumb = img
+            self.update()
 
     def _build_bubbles(self) -> None:
         total = len(self.files)
@@ -371,12 +402,23 @@ class FanMenu(QWidget):
                 p.drawText(rect, Qt.AlignCenter, f"{pct} %")
             return
 
-        f = QFont(p.font())
-        f.setFamilies(["Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji"])
-        f.setPixelSize(28)
-        p.setFont(f)
-        p.setPen(QColor(29, 29, 31) if light else QColor("white"))
-        p.drawText(rect, Qt.AlignCenter, _kind(self.files) if self.files else "✨")
+        if self.thumb is not None:
+            # aperçu du fichier dans le verre, avec le reflet et le liseré par-dessus
+            p.save()
+            p.setClipPath(path)
+            p.drawImage(rect, self.thumb)
+            p.restore()
+            self._glass_shine(p, path, rect)
+        elif self.file_icon is not None and self.files:
+            ir = QRectF(c.x() - 22, c.y() - 22, 44, 44)
+            p.drawPixmap(ir, self.file_icon, QRectF(self.file_icon.rect()))
+        else:
+            f = QFont(p.font())
+            f.setFamilies(["Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji"])
+            f.setPixelSize(28)
+            p.setFont(f)
+            p.setPen(QColor(29, 29, 31) if light else QColor("white"))
+            p.drawText(rect, Qt.AlignCenter, _kind(self.files) if self.files else "✨")
         if len(self.files) > 1:  # pastille avec le nombre de fichiers
             badge = QRectF(rect.right() - 22, rect.top() - 4, 26, 22)
             p.setPen(Qt.NoPen)
@@ -389,6 +431,32 @@ class FanMenu(QWidget):
             p.setFont(fb)
             p.setPen(QColor("white"))
             p.drawText(badge, Qt.AlignCenter, str(len(self.files)) if len(self.files) < 100 else "99+")
+
+    def _glass_shine(self, p: QPainter, path: QPainterPath, rect: QRectF) -> None:
+        """Reflets du verre seuls (sans voile), posés sur une image : bord lumineux, reflet en haut, liseré."""
+        r = rect.width() / 2
+        p.save()
+        p.setClipPath(path)
+        fres = QRadialGradient(rect.center(), r)
+        fres.setColorAt(0.0, QColor(255, 255, 255, 0))
+        fres.setColorAt(0.78, QColor(255, 255, 255, 0))
+        fres.setColorAt(1.0, QColor(255, 255, 255, 110))
+        p.fillPath(path, fres)
+        hl = QRectF(rect.left() + rect.width() * 0.18, rect.top() + rect.height() * 0.05,
+                    rect.width() * 0.64, rect.height() * 0.36)
+        g = QLinearGradient(hl.topLeft(), hl.bottomLeft())
+        g.setColorAt(0, QColor(255, 255, 255, 120))
+        g.setColorAt(1, QColor(255, 255, 255, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(g)
+        p.drawRoundedRect(hl, hl.height() / 2, hl.height() / 2)
+        p.restore()
+        edge = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+        edge.setColorAt(0, QColor(255, 255, 255, 235))
+        edge.setColorAt(1, QColor(255, 255, 255, 120))
+        p.setPen(QPen(edge, 2.0))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(path)
 
     def _glass_edge(self, p: QPainter, path: QPainterPath, rect: QRectF) -> None:
         g = QLinearGradient(rect.topLeft(), rect.bottomLeft())
