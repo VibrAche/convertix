@@ -1,0 +1,57 @@
+name: 🐞 Signaler un bug
+description: Une conversion échoue, l'éventail ne s'ouvre pas, l'app plante…
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler un problème ! Plus tu donnes de détails, plus vite il sera corrigé.
+        ⚠️ N'envoie pas de photo ou de document personnel : décris-le (type, taille, d'où il vient).
+
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Que s'est-il passé ?
+      description: Ce que tu as fait, ce que tu attendais, et ce qui s'est passé à la place.
+      placeholder: "J'ai sélectionné 3 photos HEIC, Ctrl+Alt+C, cliqué sur JPG… et rien ne s'est passé."
+    validations:
+      required: true
+
+  - type: input
+    id: fichier
+    attributes:
+      label: Type de fichier
+      description: Extension et origine du fichier.
+      placeholder: "ex. .HEIC d'un iPhone 15, .MOV de 2 Go, .docx…"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: systeme
+    attributes:
+      label: Système
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon : M1, M2, M3, M4…)
+        - macOS (Intel)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version de Convertix
+      description: Clic droit sur l'icône Convertix → Réglages, la version est écrite en bas.
+      placeholder: "ex. 0.3.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal (fortement conseillé)
+      description: |
+        Réglages → « Journal » en bas à droite. Copie ici les dernières lignes, au moment du problème.
+        Windows : `%APPDATA%\Convertix\convertix.log` — Mac : `~/Library/Application Support/Convertix/convertix.log`
+      render: text

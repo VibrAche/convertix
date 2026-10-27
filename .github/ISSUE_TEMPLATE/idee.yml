@@ -1,0 +1,21 @@
+name: 💡 Proposer une idée
+description: Un nouveau format, une option, une amélioration…
+labels: ["idée"]
+body:
+  - type: textarea
+    id: idee
+    attributes:
+      label: Ton idée
+      description: Qu'est-ce qui te manque, et à quoi ça te servirait ?
+      placeholder: "J'aimerais pouvoir convertir mes fichiers .pages (Apple) en PDF, parce que…"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: systeme
+    attributes:
+      label: Tu utilises Convertix sur
+      multiple: true
+      options:
+        - Windows
+        - Mac
