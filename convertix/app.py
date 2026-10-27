@@ -88,11 +88,16 @@ class Controller:
         self.fans: set = set()      # tous les éventails ouverts (références gardées en vie)
         self.settings_win = None
 
-        class _Bridge(QObject):
+        class _Bridge(QObject):  # appels venant d'autres threads → thread Qt
             hotkey = Signal()
+            open_last = Signal()           # bouton « Ouvrir » d'une notification Windows
+            update_found = Signal(str, str)  # version, adresse de la page de téléchargement
         self.bridge = _Bridge()
         # file d'attente : on sort du filtre d'événements natifs avant de lire la sélection (COM)
         self.bridge.hotkey.connect(self.on_hotkey, Qt.QueuedConnection)
+        self.bridge.open_last.connect(self._open_last_folder, Qt.QueuedConnection)
+        self.bridge.update_found.connect(self._on_update, Qt.QueuedConnection)
+        self._update_url = ""
 
         self.collect_timer = QTimer(singleShot=True, interval=COLLECT_MS, timeout=self._flush_pending)
 
@@ -106,6 +111,8 @@ class Controller:
         self._setup_tray()
         self.hotkey = None
         self.apply_hotkey()
+        if settings.check_updates:
+            QTimer.singleShot(15_000, self.check_updates)  # sans ralentir le démarrage
 
     # ------------------------------------------------------------------ icône
     def _setup_tray(self) -> None:
@@ -215,15 +222,44 @@ class Controller:
             self.open_fan([Path(f) for f in files])
 
     def _on_converted(self, produced: list) -> None:
+        from .platform_integration import notify
         self._last_output = Path(produced[0])
         n = len(produced)
-        self.tray.showMessage(APP_NAME, f"{n} fichier{'s' if n > 1 else ''} converti{'s' if n > 1 else ''} — "
-                                        "clique pour ouvrir le dossier", app_icon(), 4000)
+        title = f"{n} fichier{'s' if n > 1 else ''} converti{'s' if n > 1 else ''}"
+        body = self._last_output.name if n == 1 else f"Dans « {self._last_output.parent.name} »"
+        if not notify(title, body, "Ouvrir", self.bridge.open_last.emit):
+            self.tray.showMessage(APP_NAME, f"{title} — clique pour ouvrir le dossier", app_icon(), 4000)
 
     def _open_last_folder(self) -> None:
         from .platform_integration import open_folder
-        if self._last_output:
+        if self._update_url:  # la dernière bulle annonçait une mise à jour
+            self._open_update()
+        elif self._last_output:
             open_folder(self._last_output.parent, select=self._last_output)
+
+    # ------------------------------------------------------------------ mises à jour
+    def check_updates(self) -> None:
+        """Demande à GitHub la dernière version publiée (rien d'autre n'est envoyé)."""
+        import threading
+        from .updates import latest_release
+
+        def work():
+            found = latest_release()
+            if found:
+                self.bridge.update_found.emit(*found)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_update(self, version: str, url: str) -> None:
+        self._update_url = url
+        log.info("Nouvelle version disponible : %s", version)
+        self.tray.showMessage(APP_NAME, f"Convertix {version} est disponible — clique pour la télécharger.",
+                              app_icon(), 10000)
+
+    def _open_update(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl(self._update_url))
+        self._update_url = ""
 
     def open_settings(self) -> None:
         from PySide6.QtGui import QGuiApplication

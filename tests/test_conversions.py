@@ -84,6 +84,44 @@ def test_csv_french_numbers(samples, tmp_path):
     assert ws["A2"].value == "Élodie" and ws["B2"].value == 12.5
 
 
+def test_video_fast_copy_and_progress(samples, tmp_path):
+    """MOV H.264 → MP4 : copie sans réencodage, et l'avancement remonte jusqu'à 100 %."""
+    from convertix.converters import media
+    src = next(p for p in samples if p.suffix == ".mov")
+    info = media.probe(src)
+    assert info.vcodec == "h264" and info.duration > 1 and media._fast_copy("mp4", info)
+    seen: list[float] = []
+    (mp4,) = engine.convert(src, "mp4", ConvertOptions(output_dir=tmp_path, progress=seen.append))
+    assert media.probe(mp4).vcodec == "h264"
+    assert seen and max(seen) > 0.9
+
+
+def test_video_hdr_tonemap(tmp_path):
+    """Vidéo HDR (HLG, comme l'iPhone) → MP4 : couleurs ramenées en SDR, H.264 8 bits."""
+    import subprocess
+    from convertix.converters import media
+    if not (media.has_filter("zscale") and media.has_filter("tonemap")):
+        pytest.skip("ffmpeg sans zscale/tonemap")
+    src = tmp_path / "hdr.mov"
+    make = subprocess.run([media.ffmpeg_path(), "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", "testsrc=duration=1:size=320x240:rate=10", "-c:v", "libx265", "-pix_fmt", "yuv420p10le",
+                    "-x265-params", "colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc:log-level=error",
+                    "-color_primaries", "bt2020", "-color_trc", "arib-std-b67", "-colorspace", "bt2020nc",
+                    "-tag:v", "hvc1", str(src)], capture_output=True)
+    if make.returncode != 0:
+        pytest.skip("ffmpeg sans encodeur x265 pour fabriquer la vidéo HDR de test")
+    assert media.probe(src).hdr
+    (mp4,) = engine.convert(src, "mp4", ConvertOptions(output_dir=tmp_path / "out"))
+    out = media.probe(mp4)
+    assert out.vcodec == "h264" and not out.hdr
+
+
+def test_update_version_compare():
+    from convertix.updates import is_newer
+    assert is_newer("0.10.0", "0.9.3") and is_newer("v1.0.0", "0.2.0")
+    assert not is_newer("0.2.0", "0.2.0") and not is_newer("0.1.9", "0.2.0")
+
+
 def test_cancel(samples, tmp_path):
     src = next(p for p in samples if p.suffix == ".pdf")
     opts = ConvertOptions(output_dir=tmp_path)

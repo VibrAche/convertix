@@ -86,6 +86,7 @@ class FanMenu(QWidget):
         self.produced: list[Path] = []
         self.status = ""
         self.progress = (0, 0)
+        self.frac = 0.0                  # avancement du fichier en cours, s'il est connu (vidéos)
         self.spin = 0.0
         self._close_when_done = False
         self.bg: QPixmap | None = None   # capture floutée de l'écran derrière la fenêtre
@@ -354,11 +355,20 @@ class FanMenu(QWidget):
             p.setPen(QPen(QColor(255, 255, 255, 70), 5, Qt.SolidLine, Qt.RoundCap))
             p.drawEllipse(ring)
             p.setPen(QPen(QColor(style.accent()), 5, Qt.SolidLine, Qt.RoundCap))
-            if total > 1:
-                span = max(0.06, done / total)
+            if total > 1 or self.frac > 0:
+                span = max(0.04, (done + self.frac) / max(total, 1))
                 p.drawArc(ring, 90 * 16, int(-360 * 16 * span))
             else:
                 p.drawArc(ring, int(-self.spin * 16), 100 * 16)
+            if self.frac > 0:  # pourcentage au centre (conversions longues : vidéos)
+                f = QFont(p.font())
+                f.setFamilies(["SF Pro Display", "Segoe UI Variable Display", "Segoe UI"])
+                f.setBold(True)
+                f.setPixelSize(13)
+                p.setFont(f)
+                p.setPen(QColor(29, 29, 31) if light else QColor("white"))
+                pct = int(100 * (done + self.frac) / max(total, 1))
+                p.drawText(rect, Qt.AlignCenter, f"{pct} %")
             return
 
         f = QFont(p.font())
@@ -524,6 +534,7 @@ class FanMenu(QWidget):
         self.spin_timer.start()
         self.worker = ConvertWorker(files, "pdf" if merge else key, opts, merge)
         self.worker.progress.connect(self._on_progress)
+        self.worker.fraction.connect(self._on_fraction)
         self.worker.done.connect(self._on_done)
         self.worker.start()
         self.update()
@@ -532,8 +543,13 @@ class FanMenu(QWidget):
         self.spin = (self.spin + 7) % 360
         self.update()
 
+    def _on_fraction(self, f: float) -> None:
+        self.frac = f
+        self.update()
+
     def _on_progress(self, i: int, total: int, name: str) -> None:
         self.progress = (i, total)
+        self.frac = 0.0
         base = self.status.split("…")[0]
         self.status = f"{base}… {i + 1}/{total}" if total > 1 else f"{base}…"
         self.update()

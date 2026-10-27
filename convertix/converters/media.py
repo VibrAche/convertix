@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import functools
 import logging
+import re
 import shutil
+import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..engine import ConversionError, ConvertOptions, Output, Registry, Target
-from ..proc import run
+from ..proc import NO_WINDOW, run
 
 log = logging.getLogger(__name__)
 
@@ -82,18 +85,99 @@ def _video_args(key: str, q: int) -> list[str]:
     }[key]
 
 
+# HDR (vidéos iPhone en HLG / Dolby Vision) → SDR : sinon les couleurs sortent délavées en H.264
+TONEMAP = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
+           "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p")
+# codecs audio qu'un MP4 / MOV accepte tels quels (copie sans réencodage)
+COPY_AUDIO = {"aac", "mp3", "alac", "ac3", "eac3"}
+
+
+@dataclass
+class MediaInfo:
+    duration: float = 0.0          # secondes
+    vcodec: str = ""               # ex. "h264", "hevc" ; vide si pas de vidéo
+    acodecs: list[str] = field(default_factory=list)
+    hdr: bool = False
+
+
+def probe(src: Path) -> MediaInfo:
+    """Lit durée, codecs et HDR depuis la sortie de `ffmpeg -i` (pas besoin de ffprobe)."""
+    info = MediaInfo()
+    exe = ffmpeg_path()
+    if not exe:
+        return info
+    try:
+        res = subprocess.run([exe, "-hide_banner", "-nostdin", "-i", str(src)], capture_output=True,
+                             stdin=subprocess.DEVNULL, timeout=30, creationflags=NO_WINDOW)
+    except Exception:
+        return info
+    text = res.stderr.decode("utf-8", errors="replace")
+    m = re.search(r"Duration: (\d+):(\d+):(\d+(?:\.\d+)?)", text)
+    if m:
+        info.duration = int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3])
+    for line in text.splitlines():
+        if (v := re.search(r"Stream #.*?Video: (\w+)", line)) and not info.vcodec and "attached pic" not in line:
+            info.vcodec = v[1]
+            info.hdr = bool(re.search(r"arib-std-b67|smpte2084", line))
+        elif a := re.search(r"Stream #.*?Audio: (\w+)", line):
+            info.acodecs.append(a[1])
+    return info
+
+
+@functools.lru_cache(maxsize=None)
+def has_filter(name: str) -> bool:
+    exe = ffmpeg_path()
+    try:
+        res = subprocess.run([exe, "-hide_banner", "-filters"], capture_output=True, timeout=15,
+                             stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
+        return re.search(rf"\s{re.escape(name)}\s", res.stdout.decode("utf-8", "replace")) is not None
+    except Exception:
+        return False
+
+
+def _fast_copy(key: str, info: MediaInfo) -> bool:
+    """MOV iPhone en H.264 → MP4 (ou l'inverse) : on change juste l'emballage, en une seconde, sans perte."""
+    return key in ("mp4", "mov", "mkv") and info.vcodec == "h264" and not info.hdr \
+        and set(info.acodecs) <= COPY_AUDIO
+
+
+def _with_tonemap(args: list[str]) -> list[str]:
+    """Ajoute le tonemapping HDR → SDR devant le filtre vidéo existant (ou en crée un)."""
+    if "-vf" in args:
+        i = args.index("-vf") + 1
+        return args[:i] + [f"{TONEMAP},{args[i]}"] + args[i + 1:]
+    return ["-vf", TONEMAP] + args
+
+
 def _ffmpeg(src: Path, target: Target, out: Output, opts: ConvertOptions) -> list[Path]:
     exe = ffmpeg_path()
     if not exe:
         raise ConversionError("ffmpeg est introuvable.")
+    info = probe(src)
     dest = out.file(target.ext)
     if target.group == "Audio":
         args = ["-vn", "-map_metadata", "0"] + _audio_args(target.key, opts.quality)
+    elif _fast_copy(target.key, info):
+        log.info("Copie rapide sans réencodage (%s)", info.vcodec)
+        args = ["-map", "0:v:0", "-map", "0:a?", "-c", "copy", "-map_metadata", "0"]
+        if target.key in ("mp4", "mov"):
+            args += ["-movflags", "+faststart"]
     else:
         args = ["-map_metadata", "0"] + _video_args(target.key, opts.quality)
-    cmd = [exe, "-hide_banner", "-nostdin", "-y", "-i", str(src)] + args + [str(dest)]
+        if info.hdr and has_filter("zscale") and has_filter("tonemap"):
+            log.info("Vidéo HDR : conversion des couleurs en SDR")
+            args = _with_tonemap(args)
+
+    def on_line(line: str) -> None:  # « out_time_us=12345678 » envoyé par -progress
+        if info.duration > 0 and line.startswith("out_time_us="):
+            us = line.split("=", 1)[1]
+            if us.isdigit():
+                opts.report(int(us) / 1e6 / info.duration)
+
+    cmd = [exe, "-hide_banner", "-nostdin", "-y", "-i", str(src)] + args + \
+          ["-progress", "pipe:1", "-nostats", str(dest)]
     try:
-        run(cmd, opts, what="ffmpeg")
+        run(cmd, opts, what="ffmpeg", on_line=on_line)
     except BaseException:
         dest.unlink(missing_ok=True)
         raise

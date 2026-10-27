@@ -42,10 +42,18 @@ class ConvertOptions:
     output_dir: Path | None = None  # None → même dossier que la source
     subfolder: str | None = None    # ex. "Convertis" → <dossier source>/Convertis
     cancel: threading.Event = field(default_factory=threading.Event)
+    progress: Callable[[float], None] | None = None  # avancement du fichier en cours (0 → 1), si connu
 
     def check_cancel(self) -> None:
         if self.cancel.is_set():
             raise Cancelled()
+
+    def report(self, fraction: float) -> None:
+        if self.progress is not None:
+            try:
+                self.progress(max(0.0, min(1.0, fraction)))
+            except Exception:
+                pass
 
 
 class Output:

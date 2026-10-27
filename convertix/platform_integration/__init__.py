@@ -82,6 +82,14 @@ def is_autostart() -> bool:
     return False
 
 
+def notify(title: str, body: str, button: str, on_click) -> bool:
+    """Notification native avec un bouton (Windows). False → l'appelant utilise la bulle de l'icône."""
+    if IS_WIN:
+        from . import windows
+        return windows.show_toast(title, body, button, on_click)
+    return False
+
+
 def can_capture_screen() -> bool:
     """L'éventail peut-il capturer l'écran derrière lui (effet de réfraction) sans rien demander ?"""
     if IS_MAC:

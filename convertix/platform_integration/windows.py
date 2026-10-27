@@ -185,7 +185,45 @@ def is_autostart() -> bool:
         return False
 
 
+# =========================================================================== notifications natives
+
+AUMID = "VibrAche.Convertix"
+_toaster = None
+
+
+def register_aumid() -> None:
+    """Identité de l'app pour les notifications Windows (nom + icône), sans paquet MSIX ni droits admin."""
+    import winreg
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{AUMID}") as k:
+        winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
+        winreg.SetValueEx(k, "IconUri", 0, winreg.REG_SZ, str(base / "assets" / "icon.png"))
+
+
+def show_toast(title: str, body: str, button: str, on_click) -> bool:
+    """Notification Windows avec un bouton. `on_click` est appelé depuis un autre thread.
+    Retourne False si les notifications natives sont indisponibles (l'appelant prend le relais)."""
+    global _toaster
+    try:
+        from windows_toasts import InteractableWindowsToaster, Toast, ToastButton
+        if _toaster is None:
+            register_aumid()
+            _toaster = InteractableWindowsToaster(APP_NAME, notifierAUMID=AUMID)
+        toast = Toast([title, body])
+        toast.AddAction(ToastButton(button, "open"))
+        toast.on_activated = lambda _args: on_click()  # clic sur le bouton ou sur la notification
+        _toaster.show_toast(toast)
+        return True
+    except Exception:
+        log.exception("Notification Windows indisponible")
+        return False
+
+
 def install_all() -> None:
+    try:
+        register_aumid()
+    except Exception:
+        log.exception("Identité de notification non enregistrée")
     register_context_menu()
     try:
         register_sendto()
@@ -195,6 +233,11 @@ def install_all() -> None:
 
 
 def uninstall_all() -> None:
+    import winreg
+    try:
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{AUMID}")
+    except OSError:
+        pass
     unregister_context_menu()
     unregister_sendto()
     set_autostart(False)

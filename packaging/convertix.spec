@@ -20,6 +20,7 @@ binaries = collect_dynamic_libs("rawpy") + collect_dynamic_libs("pillow_heif")
 hidden = collect_submodules("convertix") + ["pillow_heif", "rawpy", "pdf2docx", "docx", "openpyxl", "pymupdf"]
 if IS_WIN:
     hidden += ["win32com.client", "win32clipboard", "win32con", "pythoncom", "pywintypes"]
+    hidden += collect_submodules("windows_toasts") + collect_submodules("winrt")
 if IS_MAC:
     hidden += ["pynput.keyboard._darwin", "pynput.mouse._darwin"]
 

@@ -15,6 +15,7 @@
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-000000?logo=apple&logoColor=white)
 [![Build](https://github.com/VibrAche/convertix/actions/workflows/build.yml/badge.svg)](https://github.com/VibrAche/convertix/actions/workflows/build.yml)
+[![Licence AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-8B5CF6)](LICENSE)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/demo-dark.gif">
@@ -40,6 +41,10 @@ flowchart LR
 - **Tout se passe sur ton ordinateur.** Aucun fichier n'est envoyé sur Internet.
 - **Autant de fichiers que tu veux** : sélectionne-en 50, ou fais clic droit sur un dossier.
 - Les bulles sont en **verre liquide** : elles reflètent ce qu'il y a derrière, comme sur iPhone.
+- **Vidéos iPhone malignes** : un MOV en H.264 devient un MP4 en une seconde, sans perte (pas de réencodage).
+  Les vidéos **HDR** sont converties avec des couleurs normales, pas délavées. Le pourcentage s'affiche en direct.
+- **Une notification** te prévient à la fin, avec un bouton **Ouvrir** pour aller direct au fichier.
+- Convertix te prévient quand **une nouvelle version** sort (désactivable dans les Réglages).
 
 ## 🔄 Ce que ça convertit
 
@@ -152,5 +157,9 @@ Architecture, règles et feuille de route : [CLAUDE.md](CLAUDE.md).
 Créé avec ❤️ par **Enzo** — [@VibrAche](https://github.com/VibrAche)
 
 Si Convertix te fait gagner du temps, laisse une ⭐ !
+
+<sub>Logiciel libre sous licence <a href="LICENSE">AGPL-3.0</a>.</sub>
+
+
 
 </div>

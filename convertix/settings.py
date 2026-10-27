@@ -50,6 +50,8 @@ class Settings:
     # Premier lancement de l'app compilée : clic droit + démarrage auto installés une fois (utile sur Mac,
     # où il n'y a pas d'installeur, et pour la version portable Windows)
     setup_done: bool = False
+    # Au démarrage, demander à GitHub s'il existe une version plus récente (une seule requête, rien d'envoyé)
+    check_updates: bool = True
 
     @classmethod
     def path(cls) -> Path:

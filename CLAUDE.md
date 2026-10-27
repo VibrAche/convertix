@@ -95,6 +95,8 @@ fenêtre. Si aucune instance ne tourne, le premier processus qui obtient `instan
    Les erreurs destinées à l'utilisateur sont des `ConversionError("message lisible")`.
 3. **Aucun droit administrateur** : tout dans `HKEY_CURRENT_USER`, installation dans `%LOCALAPPDATA%\Programs`.
 4. **Hors ligne et privé** : aucune conversion ne passe par Internet. Ne jamais ajouter d'API web de conversion.
+   Seule exception : `updates.py` demande à l'API GitHub la dernière version (désactivable, rien d'envoyé).
+   Licence **AGPL-3.0** (imposée par PyMuPDF) : toute dépendance ajoutée doit être compatible.
 5. Le moteur (`engine.py`, `converters/`) **n'importe jamais Qt** : il doit rester utilisable en CLI et testable.
 6. Imports lourds **à l'intérieur des fonctions** (rawpy, fitz, pdf2docx, win32com…) pour garder un démarrage rapide
    des processus lancés par le clic droit.
@@ -165,15 +167,18 @@ Sans Office **ni** LibreOffice installés, les conversions Word/Excel/PowerPoint
 ## Feuille de route (par priorité)
 
 1. **Stabiliser Windows** (recette ci-dessus), corriger les bugs trouvés.
-2. Notification Windows native avec bouton « Ouvrir » ; barre de progression ffmpeg réelle (lire `-progress pipe:1`).
+2. ✅ Notification Windows native avec bouton « Ouvrir » (windows-toasts, AUMID dans HKCU) ; progression ffmpeg
+   réelle (`-progress pipe:1` → `ConvertOptions.progress` → anneau de l'éventail en %).
 3. Conversions en parallèle pour les images (ThreadPool, ~4 workers) — garder Office/ffmpeg séquentiels.
 4. Options par format : redimensionner (ex. « 2048 px max »), supprimer le GPS des photos, PNG→JPEG fond de couleur.
-5. MOV iPhone → MP4 « rapide » sans réencodage (`-c copy`) quand le codec est déjà H.264, et tonemapping HDR→SDR.
+5. ✅ MOV iPhone → MP4 « rapide » sans réencodage (`-c copy`) quand le codec est déjà H.264, et tonemapping HDR→SDR
+   (zscale + tonemap, si le ffmpeg embarqué les a ; à vérifier sur le ffmpeg Mac).
 6. Menu clic droit **de premier niveau** sous Windows 11 (nécessite un `IExplorerCommand` + paquet MSIX signé : gros chantier).
 7. **Mac** : tester `macos.py` (Action rapide Finder, pynput + autorisation Accessibilité, LaunchAgent), signer/notariser le .dmg.
 8. Réduire la taille : pdf2docx tire OpenCV (~150 Mo) ; envisager Word COM pour PDF→DOCX quand Office est présent
    et rendre pdf2docx optionnel.
-9. Mise à jour automatique (vérifier la dernière Release GitHub au démarrage).
+9. ✅ Vérification des mises à jour (`updates.py`, 15 s après le démarrage) → bulle « clique pour télécharger ».
+   Piste : télécharger et installer la mise à jour automatiquement.
 
 ## Publication
 

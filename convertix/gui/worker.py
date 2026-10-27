@@ -14,11 +14,13 @@ log = logging.getLogger(__name__)
 
 class ConvertWorker(QThread):
     progress = Signal(int, int, str)          # index, total, nom du fichier
+    fraction = Signal(float)                  # avancement du fichier en cours (vidéos), 0 → 1
     done = Signal(list, list, bool)           # fichiers produits, erreurs, annulé ?
 
     def __init__(self, files: list[Path], key: str, opts: ConvertOptions, merge: bool):
         super().__init__()
         self.files, self.key, self.opts, self.merge = files, key, opts, merge
+        self.opts.progress = self.fraction.emit  # signal Qt : sûr depuis ce thread
 
     def cancel(self) -> None:
         self.opts.cancel.set()
